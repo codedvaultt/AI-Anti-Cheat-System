@@ -1,0 +1,1209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Anti-Cheating System — ProctorGuard</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Sora:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #060a0f;
+  --surface: #0d1520;
+  --surface2: #111d2e;
+  --border: #1a2d45;
+  --accent: #00d4ff;
+  --accent2: #ff3b5c;
+  --warn: #ffb020;
+  --ok: #00e87a;
+  --text: #c8daea;
+  --text-dim: #4a6a8a;
+  --mono: 'JetBrains Mono', monospace;
+  --sans: 'Sora', sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Scanline overlay */
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,212,255,0.015) 2px, rgba(0,212,255,0.015) 4px);
+  pointer-events: none; z-index: 9999;
+}
+
+/* Grid background */
+body::after {
+  content: '';
+  position: fixed; inset: 0;
+  background-image: linear-gradient(rgba(0,212,255,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,212,255,0.04) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none; z-index: 0;
+}
+
+/* ── HEADER ── */
+header {
+  position: relative; z-index: 10;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+  background: rgba(6,10,15,0.95);
+  backdrop-filter: blur(12px);
+}
+.logo {
+  display: flex; align-items: center; gap: 0.8rem;
+}
+.logo-icon {
+  width: 36px; height: 36px;
+  border: 2px solid var(--accent);
+  border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.1rem;
+  box-shadow: 0 0 16px rgba(0,212,255,0.3);
+  animation: pulse-border 2s infinite;
+}
+@keyframes pulse-border {
+  0%,100% { box-shadow: 0 0 8px rgba(0,212,255,0.3); }
+  50% { box-shadow: 0 0 24px rgba(0,212,255,0.7); }
+}
+.logo-name {
+  font-family: var(--mono);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.1em;
+}
+.logo-sub { font-size: 0.65rem; color: var(--text-dim); letter-spacing: 0.08em; }
+
+.header-status {
+  display: flex; align-items: center; gap: 1.2rem;
+}
+.status-dot {
+  display: flex; align-items: center; gap: 0.5rem;
+  font-family: var(--mono); font-size: 0.7rem;
+  letter-spacing: 0.1em; text-transform: uppercase;
+}
+.dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--text-dim);
+  transition: background 0.3s;
+}
+.dot.online { background: var(--ok); box-shadow: 0 0 8px var(--ok); animation: blink 1.5s infinite; }
+.dot.warn { background: var(--warn); box-shadow: 0 0 8px var(--warn); animation: blink 0.8s infinite; }
+.dot.danger { background: var(--accent2); box-shadow: 0 0 8px var(--accent2); animation: blink 0.4s infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+.clock {
+  font-family: var(--mono); font-size: 0.85rem;
+  color: var(--accent); letter-spacing: 0.1em;
+}
+
+/* ── MAIN LAYOUT ── */
+.app {
+  position: relative; z-index: 1;
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  grid-template-rows: auto 1fr;
+  gap: 1px;
+  height: calc(100vh - 57px);
+  background: var(--border);
+}
+
+/* ── PANELS ── */
+.panel {
+  background: var(--surface);
+  padding: 1.2rem;
+  overflow-y: auto;
+}
+.panel-top {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 1rem;
+}
+.panel-label {
+  font-family: var(--mono); font-size: 0.65rem;
+  letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--accent); opacity: 0.8;
+}
+
+/* ── CAMERA ── */
+.camera-panel {
+  grid-column: 1; grid-row: 1 / 3;
+  background: var(--bg);
+  display: flex; flex-direction: column;
+}
+.camera-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0.8rem 1.2rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.camera-wrap {
+  flex: 1;
+  position: relative;
+  display: flex; align-items: center; justify-content: center;
+  background: #000;
+  overflow: hidden;
+}
+video#cam {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1); /* mirror */
+}
+canvas#overlay {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+}
+.cam-placeholder {
+  position: absolute;
+  display: flex; flex-direction: column; align-items: center; gap: 0.8rem;
+  color: var(--text-dim);
+  font-family: var(--mono); font-size: 0.8rem;
+  text-align: center;
+}
+.cam-placeholder .icon { font-size: 3rem; }
+
+/* Corner decorations */
+.cam-corner {
+  position: absolute;
+  width: 24px; height: 24px;
+  border-color: var(--accent);
+  border-style: solid;
+  opacity: 0.6;
+}
+.cam-corner.tl { top:12px; left:12px; border-width: 2px 0 0 2px; }
+.cam-corner.tr { top:12px; right:12px; border-width: 2px 2px 0 0; }
+.cam-corner.bl { bottom:12px; left:12px; border-width: 0 0 2px 2px; }
+.cam-corner.br { bottom:12px; right:12px; border-width: 0 2px 2px 0; }
+
+/* Alert banner on camera */
+.cam-alert {
+  position: absolute; top: 0; left: 0; right: 0;
+  padding: 0.6rem 1rem;
+  background: rgba(255,59,92,0.9);
+  font-family: var(--mono); font-size: 0.75rem;
+  font-weight: 700; letter-spacing: 0.1em;
+  text-align: center; color: #fff;
+  display: none;
+  animation: flashbar 0.3s ease;
+}
+@keyframes flashbar { from{opacity:0;transform:translateY(-100%)} to{opacity:1;transform:none} }
+.cam-alert.show { display: block; }
+
+/* Face detection box */
+.face-box {
+  position: absolute;
+  border: 2px solid var(--ok);
+  box-shadow: 0 0 16px rgba(0,232,122,0.3);
+  transition: all 0.1s;
+  display: none;
+}
+.face-box.show { display: block; }
+.face-box.warn { border-color: var(--warn); box-shadow: 0 0 16px rgba(255,176,32,0.3); }
+.face-box.danger { border-color: var(--accent2); box-shadow: 0 0 16px rgba(255,59,92,0.3); }
+
+/* Scan line animation */
+.scan-line {
+  position: absolute; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: 0.6;
+  animation: scan 3s linear infinite;
+  pointer-events: none;
+}
+@keyframes scan { from{top:0%} to{top:100%} }
+
+/* Stats bar below camera */
+.cam-stats {
+  display: grid; grid-template-columns: repeat(4,1fr);
+  gap: 1px; background: var(--border);
+  border-top: 1px solid var(--border);
+}
+.stat-box {
+  background: var(--surface2);
+  padding: 0.6rem 0.8rem;
+  text-align: center;
+}
+.stat-val {
+  font-family: var(--mono); font-size: 1.1rem;
+  font-weight: 700; color: var(--accent);
+  line-height: 1;
+}
+.stat-val.warn { color: var(--warn); }
+.stat-val.danger { color: var(--accent2); }
+.stat-label { font-size: 0.6rem; color: var(--text-dim); margin-top: 0.2rem; letter-spacing: 0.06em; text-transform: uppercase; }
+
+/* ── RIGHT SIDE ── */
+.right-top {
+  grid-column: 2; grid-row: 1;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  overflow-y: auto; max-height: 50%;
+}
+.right-bottom {
+  grid-column: 2; grid-row: 2;
+  background: var(--surface2);
+  border-left: 1px solid var(--border);
+  overflow-y: auto;
+}
+
+/* ── DETECTION MODULE ── */
+.detection-list { display: flex; flex-direction: column; gap: 0.5rem; }
+.detect-item {
+  display: flex; align-items: center; gap: 0.8rem;
+  padding: 0.7rem 0.9rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.02);
+  transition: all 0.3s;
+}
+.detect-item.active { border-color: var(--accent2); background: rgba(255,59,92,0.08); }
+.detect-item.warning { border-color: var(--warn); background: rgba(255,176,32,0.08); }
+.detect-icon { font-size: 1.1rem; width: 28px; text-align: center; flex-shrink: 0; }
+.detect-info { flex: 1; min-width: 0; }
+.detect-name { font-size: 0.82rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.detect-desc { font-family: var(--mono); font-size: 0.62rem; color: var(--text-dim); margin-top: 0.1rem; }
+.detect-badge {
+  font-family: var(--mono); font-size: 0.6rem;
+  padding: 0.2em 0.6em; border-radius: 3px;
+  letter-spacing: 0.06em; font-weight: 700;
+  flex-shrink: 0;
+}
+.badge-ok { background: rgba(0,232,122,0.15); color: var(--ok); }
+.badge-warn { background: rgba(255,176,32,0.15); color: var(--warn); }
+.badge-alert { background: rgba(255,59,92,0.15); color: var(--accent2); animation: flash-badge 0.6s infinite; }
+@keyframes flash-badge { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+/* ── LOG ── */
+.log-wrap {
+  font-family: var(--mono); font-size: 0.7rem;
+  display: flex; flex-direction: column-reverse;
+  gap: 0.3rem; padding: 0.5rem;
+  max-height: 260px; overflow-y: auto;
+}
+.log-entry {
+  display: flex; gap: 0.6rem; align-items: flex-start;
+  padding: 0.35rem 0.5rem;
+  border-radius: 3px;
+  border-left: 2px solid transparent;
+  animation: logIn 0.2s ease;
+}
+@keyframes logIn { from{opacity:0;transform:translateX(6px)} to{opacity:1;transform:none} }
+.log-entry.info { border-color: var(--text-dim); }
+.log-entry.warn { border-color: var(--warn); background: rgba(255,176,32,0.05); color: var(--warn); }
+.log-entry.danger { border-color: var(--accent2); background: rgba(255,59,92,0.07); color: var(--accent2); }
+.log-entry.ok { border-color: var(--ok); background: rgba(0,232,122,0.05); color: var(--ok); }
+.log-time { color: var(--text-dim); flex-shrink: 0; }
+.log-msg { flex: 1; line-height: 1.4; }
+
+/* ── REPORT MODAL ── */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.85);
+  backdrop-filter: blur(8px);
+  z-index: 1000;
+  display: none;
+  align-items: center; justify-content: center;
+}
+.modal-overlay.show { display: flex; animation: fadeIn 0.2s; }
+@keyframes fadeIn { from{opacity:0} to{opacity:1} }
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  padding: 2rem;
+  width: 90%; max-width: 520px;
+  box-shadow: 0 0 60px rgba(0,212,255,0.15);
+}
+.modal-title {
+  font-family: var(--mono); font-size: 0.7rem;
+  letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--accent2); margin-bottom: 0.4rem;
+}
+.modal-heading {
+  font-family: var(--sans); font-size: 1.3rem;
+  font-weight: 700; margin-bottom: 1.2rem;
+}
+.report-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem;
+  margin-bottom: 1.2rem;
+}
+.report-field label {
+  display: block; font-family: var(--mono);
+  font-size: 0.62rem; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--text-dim); margin-bottom: 0.3rem;
+}
+.report-field input, .report-field select, .report-field textarea {
+  width: 100%;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 4px; padding: 0.5rem 0.7rem;
+  color: var(--text); font-family: var(--sans); font-size: 0.82rem;
+  outline: none; transition: border-color 0.2s;
+}
+.report-field input:focus, .report-field select:focus, .report-field textarea:focus { border-color: var(--accent); }
+.report-field.full { grid-column: 1 / -1; }
+.report-field textarea { resize: vertical; min-height: 70px; }
+
+.modal-snapshot {
+  margin-bottom: 1.2rem;
+}
+.snapshot-label { font-family: var(--mono); font-size: 0.62rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 0.4rem; }
+.snapshot-img {
+  width: 100%; height: 120px;
+  border: 1px solid var(--border); border-radius: 4px;
+  object-fit: cover; background: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-dim); font-size: 0.8rem;
+  overflow: hidden;
+}
+.snapshot-img img { width: 100%; height: 100%; object-fit: cover; }
+
+.modal-actions { display: flex; gap: 0.8rem; justify-content: flex-end; }
+.btn {
+  font-family: var(--mono); font-size: 0.72rem;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  padding: 0.6rem 1.4rem; border-radius: 4px;
+  cursor: pointer; border: 1px solid;
+  transition: all 0.15s;
+}
+.btn-secondary { border-color: var(--border); background: transparent; color: var(--text-dim); }
+.btn-secondary:hover { border-color: var(--text); color: var(--text); }
+.btn-danger { border-color: var(--accent2); background: rgba(255,59,92,0.1); color: var(--accent2); }
+.btn-danger:hover { background: var(--accent2); color: #fff; }
+.btn-primary { border-color: var(--accent); background: rgba(0,212,255,0.1); color: var(--accent); }
+.btn-primary:hover { background: var(--accent); color: var(--bg); }
+
+/* Alert shake */
+@keyframes shake {
+  0%,100%{transform:translateX(0)}
+  20%{transform:translateX(-8px)}
+  40%{transform:translateX(8px)}
+  60%{transform:translateX(-5px)}
+  80%{transform:translateX(5px)}
+}
+.shake { animation: shake 0.4s ease; }
+
+/* ── CONTROLS ── */
+.controls {
+  display: flex; gap: 0.6rem; flex-wrap: wrap; padding: 0.8rem 1.2rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.ctrl-btn {
+  font-family: var(--mono); font-size: 0.65rem;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 0.45rem 0.9rem; border-radius: 4px;
+  cursor: pointer; border: 1px solid var(--border);
+  background: transparent; color: var(--text-dim);
+  transition: all 0.15s;
+  display: flex; align-items: center; gap: 0.4rem;
+}
+.ctrl-btn:hover { border-color: var(--accent); color: var(--accent); }
+.ctrl-btn.active { border-color: var(--accent2); background: rgba(255,59,92,0.1); color: var(--accent2); }
+.ctrl-btn.success { border-color: var(--ok); color: var(--ok); }
+
+/* Risk meter */
+.risk-meter {
+  padding: 0.8rem 1.2rem;
+  border-bottom: 1px solid var(--border);
+}
+.risk-label-row {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 0.5rem;
+}
+.risk-title { font-family: var(--mono); font-size: 0.65rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-dim); }
+.risk-score { font-family: var(--mono); font-size: 1.4rem; font-weight: 700; color: var(--ok); transition: color 0.3s; }
+.risk-score.mid { color: var(--warn); }
+.risk-score.high { color: var(--accent2); }
+.risk-bar-wrap { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+.risk-bar-fill {
+  height: 100%; width: 0%;
+  background: linear-gradient(90deg, var(--ok), var(--warn), var(--accent2));
+  border-radius: 3px;
+  transition: width 0.6s ease;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* Tab area */
+.tab-bar {
+  display: flex; border-bottom: 1px solid var(--border);
+}
+.tab {
+  font-family: var(--mono); font-size: 0.62rem;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  padding: 0.6rem 1rem; cursor: pointer;
+  color: var(--text-dim); border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+}
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tab-content { display: none; padding: 0.8rem; }
+.tab-content.active { display: block; }
+
+/* Sent reports */
+.report-sent-list { display: flex; flex-direction: column; gap: 0.5rem; }
+.sent-item {
+  padding: 0.6rem 0.8rem;
+  border-radius: 4px; border: 1px solid var(--border);
+  background: rgba(255,255,255,0.02);
+  font-size: 0.78rem;
+}
+.sent-item .sent-meta { font-family: var(--mono); font-size: 0.6rem; color: var(--text-dim); margin-top: 0.2rem; }
+.sent-item.high { border-color: rgba(255,59,92,0.4); }
+.sent-item.medium { border-color: rgba(255,176,32,0.4); }
+
+/* Blank state */
+.blank { text-align: center; padding: 2rem; color: var(--text-dim); font-size: 0.8rem; }
+
+/* responsive */
+@media (max-width: 900px) {
+  .app { grid-template-columns: 1fr; grid-template-rows: auto auto auto; }
+  .camera-panel { grid-column: 1; grid-row: 1; height: 60vw; min-height: 240px; }
+  .right-top, .right-bottom { grid-column: 1; max-height: none; }
+}
+
+/* start screen */
+#start-screen {
+  position: fixed; inset: 0; z-index: 500;
+  background: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  flex-direction: column; gap: 1.5rem; text-align: center;
+  padding: 2rem;
+}
+.start-logo { font-size: 4rem; margin-bottom: 0.5rem; }
+.start-title { font-family: var(--mono); font-size: 1.6rem; font-weight: 700; color: var(--accent); letter-spacing: 0.1em; }
+.start-sub { color: var(--text-dim); font-size: 0.9rem; max-width: 400px; line-height: 1.6; }
+.start-features {
+  display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; margin: 0.5rem 0;
+}
+.feat-chip {
+  font-family: var(--mono); font-size: 0.68rem;
+  padding: 0.4em 0.9em; border-radius: 20px;
+  border: 1px solid var(--border); color: var(--text-dim);
+  letter-spacing: 0.06em;
+}
+.start-btn {
+  font-family: var(--mono); font-size: 0.85rem;
+  letter-spacing: 0.15em; text-transform: uppercase;
+  padding: 0.9rem 2.5rem; border-radius: 6px;
+  cursor: pointer; border: 2px solid var(--accent);
+  background: rgba(0,212,255,0.1); color: var(--accent);
+  transition: all 0.2s;
+  box-shadow: 0 0 30px rgba(0,212,255,0.2);
+}
+.start-btn:hover { background: var(--accent); color: var(--bg); box-shadow: 0 0 50px rgba(0,212,255,0.4); }
+
+/* notification toast */
+.toast {
+  position: fixed; top: 70px; right: 1.5rem; z-index: 900;
+  padding: 0.8rem 1.2rem;
+  background: var(--surface);
+  border: 1px solid var(--accent2);
+  border-radius: 6px;
+  font-size: 0.82rem; max-width: 300px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  transform: translateX(120%);
+  transition: transform 0.3s ease;
+}
+.toast.show { transform: translateX(0); }
+.toast-title { font-weight: 700; color: var(--accent2); margin-bottom: 0.2rem; }
+</style>
+</head>
+<body>
+
+<!-- START SCREEN -->
+<div id="start-screen">
+  <div class="start-logo">🛡️</div>
+  <div class="start-title">PROCTORGUARD</div>
+  <div class="start-sub">Real-time anti-cheating exam monitoring system. Please grant camera permission to start the monitoring session.</div>
+  <div class="start-features">
+    <span class="feat-chip">📷 Face recognition</span>
+    <span class="feat-chip">🖥️ Suspicious software detection</span>
+    <span class="feat-chip">📋 Proctor reporting</span>
+    <span class="feat-chip">⚡ Real-time alerts</span>
+  </div>
+  <button class="start-btn" onclick="startSession()">▶ Start Monitoring</button>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast">
+  <div class="toast-title" id="toast-title">Alert!</div>
+  <div id="toast-msg">Anomaly detected</div>
+</div>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">🛡️</div>
+    <div>
+      <div class="logo-name">PROCTORGUARD</div>
+      <div class="logo-sub">ANTI-CHEAT SYSTEM v2.4</div>
+    </div>
+  </div>
+  <div class="header-status">
+    <div class="status-dot"><div class="dot" id="main-dot"></div><span id="main-status">OFFLINE</span></div>
+    <div class="clock" id="clock">--:--:--</div>
+  </div>
+</header>
+
+<!-- APP LAYOUT -->
+<div class="app">
+
+  <!-- CAMERA COLUMN -->
+  <div class="camera-panel">
+    <div class="camera-header">
+      <div style="display:flex;align-items:center;gap:0.6rem">
+        <span style="font-family:var(--mono);font-size:0.65rem;letter-spacing:0.15em;text-transform:uppercase;color:var(--accent)">📷 CAMERA LIVE</span>
+        <div class="dot online" id="cam-dot" style="display:none"></div>
+      </div>
+      <div style="font-family:var(--mono);font-size:0.65rem;color:var(--text-dim)" id="cam-info">Disconnected</div>
+    </div>
+
+    <!-- CONTROLS -->
+    <div class="controls">
+      <button class="ctrl-btn" id="btn-monitor" onclick="toggleMonitor()">⏸ Pause</button>
+      <button class="ctrl-btn" onclick="takeSnapshot()">📸 Capture</button>
+      <button class="ctrl-btn" onclick="openReport()">🚨 Report Now</button>
+      <button class="ctrl-btn" id="btn-simulate" onclick="simulateAlert()">⚡ Simulate Violation</button>
+    </div>
+
+    <!-- RISK METER -->
+    <div class="risk-meter">
+      <div class="risk-label-row">
+        <span class="risk-title">Cheating Risk Score</span>
+        <span class="risk-score" id="risk-score">0%</span>
+      </div>
+      <div class="risk-bar-wrap"><div class="risk-bar-fill" id="risk-bar"></div></div>
+    </div>
+
+    <!-- VIDEO AREA -->
+    <div class="camera-wrap" id="cam-wrap">
+      <div class="cam-placeholder" id="cam-placeholder">
+        <div class="icon">📷</div>
+        <div>Connecting to camera...</div>
+      </div>
+      <video id="cam" autoplay muted playsinline></video>
+      <canvas id="overlay"></canvas>
+      <div class="scan-line" id="scan-line" style="display:none"></div>
+      <div class="face-box" id="face-box"></div>
+      <div class="cam-corner tl"></div>
+      <div class="cam-corner tr"></div>
+      <div class="cam-corner bl"></div>
+      <div class="cam-corner br"></div>
+      <div class="cam-alert" id="cam-alert">⚠️ ALERT: ANOMALY DETECTED!</div>
+    </div>
+
+    <!-- STATS BAR -->
+    <div class="cam-stats">
+      <div class="stat-box"><div class="stat-val" id="stat-face">--</div><div class="stat-label">Faces</div></div>
+      <div class="stat-box"><div class="stat-val" id="stat-alert">0</div><div class="stat-label">Alerts</div></div>
+      <div class="stat-box"><div class="stat-val" id="stat-time">00:00</div><div class="stat-label">Duration</div></div>
+      <div class="stat-box"><div class="stat-val" id="stat-reports">0</div><div class="stat-label">Reports</div></div>
+    </div>
+  </div>
+
+  <!-- RIGHT TOP: DETECTION MODULES -->
+  <div class="right-top">
+    <div style="padding:0.8rem 1.2rem;border-bottom:1px solid var(--border)">
+      <div class="panel-label">Detection Modules</div>
+    </div>
+    <div style="padding:0.8rem">
+      <div class="detection-list" id="detection-list">
+        <!-- Face Detection -->
+        <div class="detect-item" id="mod-face">
+          <div class="detect-icon">👤</div>
+          <div class="detect-info">
+            <div class="detect-name">Face detection</div>
+            <div class="detect-desc">Detects absence / multiple people</div>
+          </div>
+          <div class="detect-badge badge-ok" id="badge-face">OK</div>
+        </div>
+        <!-- Look Away -->
+        <div class="detect-item" id="mod-gaze">
+          <div class="detect-icon">👁️</div>
+          <div class="detect-info">
+            <div class="detect-name">Abnormal gaze direction</div>
+            <div class="detect-desc">Looking away / off-screen</div>
+          </div>
+          <div class="detect-badge badge-ok" id="badge-gaze">OK</div>
+        </div>
+        <!-- Tab switch -->
+        <div class="detect-item" id="mod-tab">
+          <div class="detect-icon">🗂️</div>
+          <div class="detect-info">
+            <div class="detect-name">Tab / window switching</div>
+            <div class="detect-desc" id="tab-count-desc">Tab switches: 0</div>
+          </div>
+          <div class="detect-badge badge-ok" id="badge-tab">OK</div>
+        </div>
+        <!-- Screen capture -->
+        <div class="detect-item" id="mod-screen">
+          <div class="detect-icon">🖥️</div>
+          <div class="detect-info">
+            <div class="detect-name">Screen capture / recording</div>
+            <div class="detect-desc">PrintScreen key, OBS, Bandicam...</div>
+          </div>
+          <div class="detect-badge badge-ok" id="badge-screen">OK</div>
+        </div>
+        <!-- DevTools -->
+        <div class="detect-item" id="mod-devtools">
+          <div class="detect-icon">🔧</div>
+          <div class="detect-info">
+            <div class="detect-name">Developer Tools</div>
+            <div class="detect-desc">Open F12 / Inspect Element</div>
+          </div>
+          <div class="detect-badge badge-ok" id="badge-devtools">OK</div>
+        </div>
+        <!-- Copy paste -->
+        <div class="detect-item" id="mod-copy">
+          <div class="detect-icon">📋</div>
+          <div class="detect-info">
+            <div class="detect-name">Abnormal Copy / Paste</div>
+            <div class="detect-desc" id="copy-count-desc">Count: 0</div>
+          </div>
+          <div class="detect-badge badge-ok" id="badge-copy">OK</div>
+        </div>
+        <!-- Right click -->
+        <div class="detect-item" id="mod-ctx">
+          <div class="detect-icon">🖱️</div>
+          <div class="detect-info">
+            <div class="detect-name">Right click / context menu</div>
+            <div class="detect-desc" id="ctx-count-desc">Count: 0</div>
+          </div>
+          <div class="detect-badge badge-ok" id="badge-ctx">OK</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT BOTTOM: LOGS + REPORTS -->
+  <div class="right-bottom">
+    <div class="tab-bar">
+      <div class="tab active" onclick="switchTab('log')">Logs</div>
+      <div class="tab" onclick="switchTab('reports')">Sent Reports</div>
+    </div>
+    <div class="tab-content active" id="tab-log">
+      <div class="log-wrap" id="log-wrap">
+        <div class="log-entry info"><span class="log-time">--:--:--</span><span class="log-msg">System ready. Waiting for camera connection...</span></div>
+      </div>
+    </div>
+    <div class="tab-content" id="tab-reports">
+      <div class="report-sent-list" id="reports-sent">
+        <div class="blank">No reports have been sent yet</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- REPORT MODAL -->
+<div class="modal-overlay" id="report-modal">
+  <div class="modal">
+    <div class="modal-title">⚠ Violation Report</div>
+    <div class="modal-heading">Send Alert To Proctor</div>
+    <div class="modal-snapshot">
+      <div class="snapshot-label">Snapshot at violation time</div>
+      <div class="snapshot-img" id="snapshot-container">
+        <canvas id="snapshot-canvas" style="width:100%;height:100%;display:none;object-fit:cover"></canvas>
+        <span id="snapshot-placeholder">📷 No snapshot yet</span>
+      </div>
+    </div>
+    <div class="report-grid">
+      <div class="report-field">
+        <label>Candidate ID</label>
+        <input type="text" id="r-id" placeholder="e.g. TS001" value="TS001">
+      </div>
+      <div class="report-field">
+        <label>Exam Room</label>
+        <input type="text" id="r-room" placeholder="e.g. P201" value="P201">
+      </div>
+      <div class="report-field">
+        <label>Violation Type</label>
+        <select id="r-type">
+          <option value="face">Abnormal face detection</option>
+          <option value="software">Third-party software</option>
+          <option value="tab">Tab/window switching</option>
+          <option value="copy">Abnormal copy activity</option>
+          <option value="screen">Screen capture</option>
+          <option value="devtools">DevTools opened</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      <div class="report-field">
+        <label>Severity</label>
+        <select id="r-severity">
+          <option value="low">Low</option>
+          <option value="medium" selected>Medium</option>
+          <option value="high">High</option>
+          <option value="critical">Critical</option>
+        </select>
+      </div>
+      <div class="report-field full">
+        <label>Additional Notes</label>
+        <textarea id="r-note" placeholder="Describe the incident in detail..."></textarea>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeReport()">Cancel</button>
+      <button class="btn btn-primary" onclick="sendReport()">🚨 Send Report</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── STATE ──
+const state = {
+  active: false,
+  stream: null,
+  alertCount: 0,
+  reportCount: 0,
+  tabSwitches: 0,
+  copyCount: 0,
+  ctxCount: 0,
+  riskScore: 0,
+  sessionStart: null,
+  monitoring: true,
+  faceDetected: true,
+  reports: [],
+  faceSimInterval: null,
+};
+
+// ── CLOCK ──
+setInterval(() => {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.toLocaleTimeString('en-US', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}, 1000);
+
+setInterval(() => {
+  if (!state.active || !state.sessionStart) return;
+  const s = Math.floor((Date.now() - state.sessionStart) / 1000);
+  const mm = String(Math.floor(s/60)).padStart(2,'0');
+  const ss = String(s%60).padStart(2,'0');
+  document.getElementById('stat-time').textContent = mm+':'+ss;
+}, 1000);
+
+// ── START SESSION ──
+async function startSession() {
+  document.getElementById('start-screen').style.display = 'none';
+  await initCamera();
+  state.active = true;
+  state.sessionStart = Date.now();
+  document.getElementById('main-dot').className = 'dot online';
+  document.getElementById('main-status').textContent = 'MONITORING';
+  addLog('Monitoring session started', 'ok');
+  addLog('All detection modules activated', 'info');
+  initDetectors();
+  startFaceSimulation();
+}
+
+// ── CAMERA ──
+async function initCamera() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
+      audio: false
+    });
+    state.stream = stream;
+    const video = document.getElementById('cam');
+    video.srcObject = stream;
+    document.getElementById('cam-placeholder').style.display = 'none';
+    document.getElementById('scan-line').style.display = 'block';
+    document.getElementById('cam-dot').style.display = 'inline-block';
+    document.getElementById('cam-info').textContent = '720p · 30fps';
+
+    const track = stream.getVideoTracks()[0];
+    const settings = track.getSettings();
+    if (settings.width) {
+      document.getElementById('cam-info').textContent = `${settings.width}×${settings.height} · Camera active`;
+    }
+    document.getElementById('stat-face').textContent = '1';
+    addLog('Camera connected successfully', 'ok');
+    startFaceBoxSimulation();
+  } catch(e) {
+    document.getElementById('cam-placeholder').querySelector('div:last-child').textContent = '⚠ Cannot access camera. Check permissions.';
+    addLog('Camera error: ' + e.message, 'danger');
+  }
+}
+
+// ── FACE BOX SIMULATION (mimic real detection position) ──
+function startFaceBoxSimulation() {
+  const box = document.getElementById('face-box');
+  const wrap = document.getElementById('cam-wrap');
+  box.classList.add('show');
+
+  function updateBox() {
+    if (!state.monitoring) return;
+    const w = wrap.offsetWidth;
+    const h = wrap.offsetHeight;
+    const bw = Math.floor(w * 0.28);
+    const bh = Math.floor(bw * 1.2);
+    const cx = Math.floor(w/2 + (Math.random()-0.5)*w*0.06);
+    const cy = Math.floor(h*0.42 + (Math.random()-0.5)*h*0.04);
+    box.style.width = bw + 'px';
+    box.style.height = bh + 'px';
+    box.style.left = (cx - bw/2) + 'px';
+    box.style.top = (cy - bh/2) + 'px';
+    box.className = 'face-box show';
+  }
+  updateBox();
+  setInterval(updateBox, 1500);
+}
+
+// ── FACE SIMULATION (occasional "no face" ──
+function startFaceSimulation() {
+  setInterval(() => {
+    if (!state.active || !state.monitoring) return;
+    const r = Math.random();
+    if (r < 0.03) {
+      triggerAlert('face', 'No face detected in frame!', 'danger');
+      document.getElementById('face-box').classList.remove('show');
+      document.getElementById('stat-face').textContent = '0';
+      document.getElementById('stat-face').className = 'stat-val danger';
+      setTimeout(() => {
+        document.getElementById('face-box').classList.add('show');
+        document.getElementById('stat-face').textContent = '1';
+        document.getElementById('stat-face').className = 'stat-val';
+        resetModule('face');
+      }, 3000);
+    } else if (r < 0.035) {
+      triggerAlert('face', 'Multiple faces detected in frame!', 'danger');
+      document.getElementById('stat-face').textContent = '2+';
+      document.getElementById('stat-face').className = 'stat-val danger';
+      setTimeout(() => {
+        document.getElementById('stat-face').textContent = '1';
+        document.getElementById('stat-face').className = 'stat-val';
+        resetModule('face');
+      }, 4000);
+    }
+  }, 2000);
+}
+
+// ── ALL DETECTORS ──
+function initDetectors() {
+  // Tab visibility
+  document.addEventListener('visibilitychange', () => {
+    if (!state.active || !state.monitoring) return;
+    if (document.hidden) {
+      state.tabSwitches++;
+      document.getElementById('tab-count-desc').textContent = `Tab switches: ${state.tabSwitches}`;
+      triggerAlert('tab', `User left the exam page! (count ${state.tabSwitches})`, state.tabSwitches >= 3 ? 'danger' : 'warn');
+      autoReport('tab', state.tabSwitches >= 3 ? 'high' : 'medium');
+    }
+  });
+
+  // Copy/Paste
+  document.addEventListener('copy', () => {
+    if (!state.active) return;
+    state.copyCount++;
+    document.getElementById('copy-count-desc').textContent = `Count: ${state.copyCount}`;
+    triggerAlert('copy', `COPY action detected! (count ${state.copyCount})`, 'warn');
+    if (state.copyCount >= 3) autoReport('copy', 'medium');
+  });
+  document.addEventListener('paste', () => {
+    if (!state.active) return;
+    state.copyCount++;
+    document.getElementById('copy-count-desc').textContent = `Count: ${state.copyCount}`;
+    triggerAlert('copy', `PASTE action detected! (count ${state.copyCount})`, 'warn');
+    if (state.copyCount >= 2) autoReport('copy', 'high');
+  });
+
+  // Right click
+  document.addEventListener('contextmenu', (e) => {
+    if (!state.active) return;
+    e.preventDefault();
+    state.ctxCount++;
+    document.getElementById('ctx-count-desc').textContent = `Count: ${state.ctxCount}`;
+    triggerAlert('ctx', `Right-click detected! (count ${state.ctxCount})`, 'warn');
+  });
+
+  // PrintScreen / F12
+  document.addEventListener('keydown', (e) => {
+    if (!state.active) return;
+    if (e.key === 'PrintScreen') {
+      triggerAlert('screen', 'PRINT SCREEN key press detected!', 'danger');
+      autoReport('screen', 'high');
+    }
+    if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'J'))) {
+      triggerAlert('devtools', 'Developer Tools opening detected!', 'danger');
+      autoReport('devtools', 'critical');
+    }
+    if (e.ctrlKey && e.key === 'u') {
+      triggerAlert('devtools', 'View source action detected (Ctrl+U)!', 'danger');
+    }
+    // Block select all
+    if (e.ctrlKey && e.key === 'a') {
+      e.preventDefault();
+      state.copyCount++;
+      document.getElementById('copy-count-desc').textContent = `Count: ${state.copyCount}`;
+      triggerAlert('copy', 'Select All detected (Ctrl+A)!', 'warn');
+    }
+  });
+
+  // DevTools detection (window size change trick)
+  let devtoolsOpen = false;
+  setInterval(() => {
+    if (!state.active) return;
+    const threshold = 160;
+    const opened = (window.outerHeight - window.innerHeight > threshold) || (window.outerWidth - window.innerWidth > threshold);
+    if (opened && !devtoolsOpen) {
+      devtoolsOpen = true;
+      triggerAlert('devtools', 'DevTools is currently open!', 'danger');
+      autoReport('devtools', 'critical');
+    } else if (!opened) { devtoolsOpen = false; }
+  }, 2000);
+
+  // Gaze simulation (random look-away events)
+  setInterval(() => {
+    if (!state.active || !state.monitoring) return;
+    if (Math.random() < 0.025) {
+      triggerAlert('gaze', 'Abnormal gaze direction - possible off-screen reference!', 'warn');
+    }
+  }, 4000);
+}
+
+// ── TRIGGER ALERT ──
+function triggerAlert(module, msg, level) {
+  if (!state.active) return;
+  state.alertCount++;
+  document.getElementById('stat-alert').textContent = state.alertCount;
+  document.getElementById('stat-alert').className = 'stat-val ' + (state.alertCount > 5 ? 'danger' : 'warn');
+
+  addLog(msg, level === 'danger' ? 'danger' : 'warn');
+  updateRisk(level);
+  updateModuleBadge(module, level);
+  showCamAlert(msg);
+  showToast('⚠ ALERT', msg);
+}
+
+function updateModuleBadge(module, level) {
+  const map = { face:'face', tab:'tab', copy:'copy', screen:'screen', devtools:'devtools', gaze:'gaze', ctx:'ctx' };
+  const id = 'badge-' + (map[module] || module);
+  const itemId = 'mod-' + (map[module] || module);
+  const badge = document.getElementById(id);
+  const item = document.getElementById(itemId);
+  if (!badge) return;
+  if (level === 'danger') {
+    badge.textContent = '⚠ VIOLATION'; badge.className = 'detect-badge badge-alert';
+    item.className = 'detect-item active';
+  } else {
+    badge.textContent = '⚡ WARNING'; badge.className = 'detect-badge badge-warn';
+    item.className = 'detect-item warning';
+  }
+}
+
+function resetModule(module) {
+  const badge = document.getElementById('badge-' + module);
+  const item = document.getElementById('mod-' + module);
+  if (badge) { badge.textContent = 'OK'; badge.className = 'detect-badge badge-ok'; }
+  if (item) item.className = 'detect-item';
+}
+
+function updateRisk(level) {
+  const add = level === 'danger' ? 15 : level === 'warn' ? 7 : 3;
+  state.riskScore = Math.min(100, state.riskScore + add);
+  document.getElementById('risk-bar').style.width = state.riskScore + '%';
+  const el = document.getElementById('risk-score');
+  el.textContent = state.riskScore + '%';
+  el.className = 'risk-score' + (state.riskScore >= 70 ? ' high' : state.riskScore >= 40 ? ' mid' : '');
+}
+
+function showCamAlert(msg) {
+  const el = document.getElementById('cam-alert');
+  el.textContent = '⚠️ ' + msg;
+  el.classList.add('show');
+  document.getElementById('cam-wrap').classList.add('shake');
+  document.getElementById('face-box').className = 'face-box show danger';
+  setTimeout(() => {
+    el.classList.remove('show');
+    document.getElementById('cam-wrap').classList.remove('shake');
+    document.getElementById('face-box').className = 'face-box show';
+  }, 3000);
+}
+
+// ── LOG ──
+function addLog(msg, type = 'info') {
+  const wrap = document.getElementById('log-wrap');
+  const now = new Date().toLocaleTimeString('en-US', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const el = document.createElement('div');
+  el.className = 'log-entry ' + type;
+  el.innerHTML = `<span class="log-time">${now}</span><span class="log-msg">${msg}</span>`;
+  wrap.insertBefore(el, wrap.firstChild);
+  // Keep max 60 entries
+  while (wrap.children.length > 60) wrap.removeChild(wrap.lastChild);
+}
+
+// ── TOAST ──
+let toastTimer;
+function showToast(title, msg) {
+  document.getElementById('toast-title').textContent = title;
+  document.getElementById('toast-msg').textContent = msg;
+  const t = document.getElementById('toast');
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 4000);
+}
+
+// ── SNAPSHOT ──
+function takeSnapshot() {
+  const video = document.getElementById('cam');
+  const canvas = document.getElementById('snapshot-canvas');
+  if (!state.stream) { showToast('⚠ Error', 'Camera is not connected yet'); return; }
+  canvas.width = video.videoWidth || 640;
+  canvas.height = video.videoHeight || 360;
+  const ctx2 = canvas.getContext('2d');
+  ctx2.save();
+  ctx2.scale(-1, 1); ctx2.translate(-canvas.width, 0);
+  ctx2.drawImage(video, 0, 0);
+  ctx2.restore();
+  // Timestamp overlay
+  ctx2.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx2.fillRect(0, canvas.height - 30, canvas.width, 30);
+  ctx2.fillStyle = '#00d4ff';
+  ctx2.font = '12px JetBrains Mono, monospace';
+  ctx2.fillText('PROCTORGUARD · ' + new Date().toLocaleString('en-US'), 8, canvas.height - 10);
+  canvas.style.display = 'block';
+  document.getElementById('snapshot-placeholder').style.display = 'none';
+  state.lastSnapshot = canvas.toDataURL('image/jpeg', 0.8);
+  addLog('Snapshot captured', 'ok');
+  showToast('📸 Captured', 'Image will be attached to the next report');
+}
+
+// ── AUTO REPORT ──
+function autoReport(type, severity) {
+  takeSnapshot();
+  setTimeout(() => {
+    const typeLabels = {
+      face: 'Abnormal face detection', tab: 'Tab/window switching',
+      copy: 'Abnormal copy activity', screen: 'Screen capture',
+      devtools: 'DevTools opened', other: 'Other'
+    };
+    const report = {
+      id: 'RPT-' + String(state.reportCount + 1).padStart(3,'0'),
+      time: new Date().toLocaleTimeString('en-US'),
+      type, typeLabel: typeLabels[type] || type,
+      severity, student: 'TS001', room: 'P201',
+      note: 'Automatically detected by system',
+      snapshot: state.lastSnapshot
+    };
+    state.reports.unshift(report);
+    state.reportCount++;
+    document.getElementById('stat-reports').textContent = state.reportCount;
+    addLog(`📤 Report ${report.id} sent to proctor - ${report.typeLabel}`, 'ok');
+    updateReportsList();
+  }, 500);
+}
+
+// ── MANUAL REPORT ──
+function openReport() {
+  takeSnapshot();
+  setTimeout(() => document.getElementById('report-modal').classList.add('show'), 200);
+}
+
+function closeReport() {
+  document.getElementById('report-modal').classList.remove('show');
+}
+
+function sendReport() {
+  const type = document.getElementById('r-type').value;
+  const severity = document.getElementById('r-severity').value;
+  const student = document.getElementById('r-id').value;
+  const room = document.getElementById('r-room').value;
+  const note = document.getElementById('r-note').value;
+  const typeLabels = {
+    face:'Abnormal face detection', software:'Third-party software',
+    tab:'Tab/window switching', copy:'Abnormal copy activity',
+    screen:'Screen capture', devtools:'DevTools opened', other:'Other'
+  };
+  const report = {
+    id: 'RPT-' + String(state.reportCount + 1).padStart(3,'0'),
+    time: new Date().toLocaleTimeString('en-US'),
+    type, typeLabel: typeLabels[type],
+    severity, student, room, note,
+    snapshot: state.lastSnapshot
+  };
+  state.reports.unshift(report);
+  state.reportCount++;
+  document.getElementById('stat-reports').textContent = state.reportCount;
+  addLog(`📤 Manual report ${report.id} sent - ${report.typeLabel}`, 'ok');
+  updateReportsList();
+  closeReport();
+  switchTab('reports');
+  showToast('✅ Sent', `Report ${report.id} has been sent to the proctor`);
+}
+
+function updateReportsList() {
+  const el = document.getElementById('reports-sent');
+  if (state.reports.length === 0) { el.innerHTML = '<div class="blank">No reports yet</div>'; return; }
+  el.innerHTML = state.reports.map(r => `
+    <div class="sent-item ${r.severity === 'high' || r.severity === 'critical' ? 'high' : r.severity === 'medium' ? 'medium' : ''}">
+      <div><strong>${r.id}</strong> — ${r.typeLabel}</div>
+      <div class="sent-meta">${r.time} · Candidate: ${r.student} · Room: ${r.room} · Severity: ${r.severity.toUpperCase()}</div>
+      ${r.note ? `<div class="sent-meta" style="margin-top:0.2rem;color:var(--text-dim)">${r.note}</div>` : ''}
+    </div>
+  `).join('');
+}
+
+// ── SIMULATE VIOLATION ──
+const violations = [
+  { module:'tab', msg:'[SIMULATION] User switched to another tab!', level:'danger', type:'tab' },
+  { module:'face', msg:'[SIMULATION] Face could not be detected!', level:'danger', type:'face' },
+  { module:'copy', msg:'[SIMULATION] PASTE action detected from clipboard!', level:'warn', type:'copy' },
+  { module:'screen', msg:'[SIMULATION] Screen recording software detected!', level:'danger', type:'screen' },
+  { module:'devtools', msg:'[SIMULATION] Developer Tools opened (F12)!', level:'danger', type:'devtools' },
+  { module:'gaze', msg:'[SIMULATION] Abnormal gaze direction - looking left!', level:'warn', type:'gaze' },
+];
+let simIdx = 0;
+function simulateAlert() {
+  if (!state.active) { showToast('⚠ Not started', 'Please start a monitoring session first'); return; }
+  const v = violations[simIdx % violations.length]; simIdx++;
+  triggerAlert(v.module, v.msg, v.level);
+  if (v.level === 'danger') autoReport(v.type, 'high');
+}
+
+// ── TOGGLE MONITOR ──
+function toggleMonitor() {
+  state.monitoring = !state.monitoring;
+  const btn = document.getElementById('btn-monitor');
+  if (state.monitoring) {
+    btn.textContent = '⏸ Pause';
+    btn.classList.remove('active');
+    document.getElementById('scan-line').style.display = 'block';
+    addLog('Monitoring resumed', 'ok');
+    document.getElementById('main-dot').className = 'dot online';
+    document.getElementById('main-status').textContent = 'MONITORING';
+  } else {
+    btn.textContent = '▶ Resume';
+    btn.classList.add('active');
+    document.getElementById('scan-line').style.display = 'none';
+    addLog('Monitoring paused', 'warn');
+    document.getElementById('main-dot').className = 'dot warn';
+    document.getElementById('main-status').textContent = 'PAUSED';
+  }
+}
+
+// ── TABS ──
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach((t,i) => {
+    const names = ['log','reports'];
+    t.classList.toggle('active', names[i] === tab);
+  });
+  document.getElementById('tab-log').classList.toggle('active', tab === 'log');
+  document.getElementById('tab-reports').classList.toggle('active', tab === 'reports');
+}
+
+// ── DISABLE DRAG / SELECT ──
+document.addEventListener('dragstart', e => e.preventDefault());
+document.addEventListener('selectstart', e => { if (state.active) e.preventDefault(); });
+</script>
+</body>
+</html>
