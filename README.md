@@ -102,7 +102,3 @@ Developed a web-based AI anti-cheating system that monitors user behavior during
 
 ---
 
-## 👤 Author
-
-Your Name
-GitHub: https://github.com/YOUR_USERNAME
